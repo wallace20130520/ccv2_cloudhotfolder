@@ -2,7 +2,7 @@
 <!--
  [y] hybris Platform
 
- Copyright (c) 2018 SAP SE or an SAP affiliate company.  All rights reserved.
+ Copyright (c) 2017 SAP SE or an SAP affiliate company.  All rights reserved.
 
  This software is the confidential and proprietary information of SAP
  ("Confidential Information"). You shall not disclose such Confidential
@@ -10,280 +10,300 @@
  license agreement you entered into with SAP.
 -->
 <beans xmlns="http://www.springframework.org/schema/beans"
-	   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	   xmlns:aop="http://www.springframework.org/schema/aop"
-	   xmlns:int="http://www.springframework.org/schema/integration"
-	   xmlns:file="http://www.springframework.org/schema/integration/file"
-	   xmlns:context="http://www.springframework.org/schema/context"
-	   xmlns:p="http://www.springframework.org/schema/p"
-	   xsi:schemaLocation="http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop.xsd
-		http://www.springframework.org/schema/integration http://www.springframework.org/schema/integration/spring-integration.xsd
-		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
-		http://www.springframework.org/schema/context
-           http://www.springframework.org/schema/context/spring-context.xsd">
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:int="http://www.springframework.org/schema/integration"
+       xmlns:util="http://www.springframework.org/schema/util"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:file="http://www.springframework.org/schema/integration/file"
 
-	<context:annotation-config/>
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+           http://www.springframework.org/schema/integration http://www.springframework.org/schema/integration/spring-integration.xsd
+           http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util.xsd
+           http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop.xsd
+            http://www.springframework.org/schema/integration/file
+            http://www.springframework.org/schema/integration/file/spring-integration-file.xsd">
 
-	<!-- General setup -->
-	<int:channel id="errorChannel" />
-	<int:service-activator input-channel="errorChannel" ref="errorHandler" method="onError" />
-	<bean id="errorHandler" class="de.hybris.platform.acceleratorservices.dataimport.batch.task.ErrorHandler">
-		<property name="cleanupHelper" ref="cleanupHelper" />
-	</bean>
-	<bean id="cleanupHelper" class="de.hybris.platform.acceleratorservices.dataimport.batch.task.CleanupHelper">
-		<property name="timeStampFormat" value="yyyyMMddHHmmssSSS" />
-	</bean>
-	<bean id="fileOrderComparator" class="de.hybris.platform.acceleratorservices.dataimport.batch.FileOrderComparator">
-		<property name="prefixPriority">
-			<map>
-				<!-- default priority is 0 -->
-				<entry key="base_product" value="2" />
-				<entry key="variant" value="1" />
-			</map>
-		</property>
-	</bean>
-	<bean id="baseDirectory" class="java.lang.String">
-		<constructor-arg value="#{configurationService.configuration.getProperty('acceleratorservices.batch.impex.basefolder')}" />
-	</bean>
-	<!-- Impex import process -->
-	<!-- 1) Scan for files, site dependent -->
-	<!-- check {extensionName}-spring-{siteName}.xml files for spring integration configuration of this first step -->
 
-	<!-- 2) move the file to processing and setup header, partly site dependent -->
-	<int:service-activator input-channel="batchFilesHeaderInit" output-channel="batchFilesHeader" ref="headerInitTask"
-						   method="execute" />
-	<bean id="headerInitTask" class="de.hybris.platform.acceleratorservices.dataimport.batch.task.HeaderInitTask">
-		<property name="sequenceIdParser" ref="batchSequenceIdParser"/>
-		<property name="languageParser" ref="batchLanguageParser"/>
-		<property name="fallbackLanguage" value="en" />
-	</bean>
-	<bean id="batchSequenceIdParser" class="de.hybris.platform.acceleratorservices.dataimport.batch.util.SequenceIdParser">
-		<property name="parser">
-			<bean class="de.hybris.platform.acceleratorservices.util.RegexParser">
-				<property name="regex" value="-(\d+)\.csv" />
-			</bean>
-		</property>
-	</bean>
-	<bean id="batchLanguageParser" class="de.hybris.platform.acceleratorservices.util.RegexParser">
-		<property name="regex" value="-(\w{2})-(\d+)\.csv" />
+
+    <!-- Local and Remote Path properties -->
+
+    <bean id="azureHotfolderRemotePath" class="java.lang.String">
+        <constructor-arg name="value"
+                         value="${azure.hotfolder.storage.container.hotfolder}"/>
+    </bean>
+
+    <bean id="azureHotfolderProcessingRemotePath" class="java.lang.String">
+        <constructor-arg name="value"
+                         value="${azure.hotfolder.storage.container.hotfolder}/processing"/>
+    </bean>
+
+	<bean id="azureHotfolderErrorRemotePath" class="java.lang.String">
+		<constructor-arg name="value"
+                         value="${azure.hotfolder.storage.container.hotfolder}/error"/>
 	</bean>
 
-	<!-- 3) transform csv to impex file -->
-	<int:service-activator input-channel="batchFilesHeader" output-channel="batchFilesTran" ref="batchTransformerTask"
-						   method="execute" />
-	<bean id="batchTransformerTask"
-		  class="de.hybris.platform.acceleratorservices.dataimport.batch.task.ImpexTransformerTask"
-		  init-method="initConvertersMap">
-		<property name="fieldSeparator" value="," />
-		<property name="encoding" value="UTF-8" />
-		<property name="linesToSkip" value="0"/>
-		<property name="cleanupHelper" ref="cleanupHelper" />
+	<bean id="azureHotfolderArchiveRemotePath" class="java.lang.String">
+		<constructor-arg name="value"
+                         value="${azure.hotfolder.storage.container.hotfolder}/archive"/>
 	</bean>
 
-	<!-- Transformer converters mappings -->
-	<bean id="batchProductConverterMapping"
-		  class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.mapping.impl.DefaultConverterMapping"
-		  p:mapping="base_product"
-		  p:converter-ref="batchProductConverter"/>
-
-	<bean id="batchTaxConverterMapping"
-		  class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.mapping.impl.DefaultConverterMapping"
-		  p:mapping="tax"
-		  p:converter-ref="batchTaxConverter"/>
-
-	<bean id="batchExternalTaxConverterMapping"
-		  class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.mapping.impl.DefaultConverterMapping"
-		  p:mapping="external_tax"
-		  p:converter-ref="batchExternalTaxConverter"/>
-
-	<bean id="batchPriceConverterMapping"
-		  class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.mapping.impl.DefaultConverterMapping"
-		  p:mapping="price"
-		  p:converter-ref="batchPriceConverter"/>
-
-	<bean id="batchStockConverterMapping"
-		  class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.mapping.impl.DefaultConverterMapping"
-		  p:mapping="stock"
-		  p:converter-ref="batchStockConverter"/>
-
-	<bean id="batchStockIncrementalConverterMapping"
-		  class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.mapping.impl.DefaultConverterMapping"
-		  p:mapping="inc-stock"
-		  p:converter-ref="batchStockIncrementalConverter"/>
-
-	<bean id="batchMerchandiseConverterMapping"
-		  class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.mapping.impl.DefaultConverterMapping"
-		  p:mapping="merchandise"
-		  p:converter-ref="batchMerchandiseConverter"/>
-
-	<bean id="batchCustomerConverterMapping"
-		  class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.mapping.impl.DefaultConverterMapping"
-		  p:mapping="customer"
-		  p:converter-ref="batchCustomerConverter"/>
-
-	<!-- 4) run impex import -->
-	<int:service-activator input-channel="batchFilesTran" output-channel="batchFilesImp" ref="batchRunnerTask"
-						   method="execute" />
-	<bean id="batchRunnerTask" class="de.hybris.platform.acceleratorservices.dataimport.batch.task.AbstractImpexRunnerTask">
-		<property name="sessionService" ref="sessionService" />
-		<property name="importService" ref="importService" />
-		<lookup-method name="getImportConfig" bean="importConfig" />
-	</bean>
-	<bean id="importConfig" class="de.hybris.platform.servicelayer.impex.ImportConfig" scope="prototype">
-		<property name="removeOnSuccess" value="true" />
-		<property name="failOnError" value="false" />
-		<property name="synchronous" value="true" />
-		<property name="legacyMode" value="false" />
-		<property name="maxThreads" value="#{configurationService.configuration.getProperty('acceleratorservices.batch.impex.max-threads')}" />
-		<property name="locale" value="en"/>
+	<bean id="azureHotfolderUnmappedRemotePath" class="java.lang.String">
+		<constructor-arg name="value"
+                         value="${azure.hotfolder.storage.container.hotfolder}/unmappped"/>
 	</bean>
 
-	<!-- 5) Cleanup -->
-	<int:service-activator input-channel="batchFilesImp" ref="batchCleanupTask" method="execute" />
-	<bean id="batchCleanupTask" class="de.hybris.platform.acceleratorservices.dataimport.batch.task.CleanupTask">
-		<property name="cleanupHelper" ref="cleanupHelper" />
+    <bean id="azureHotfolderLocalDirectoryBase" class="java.lang.String">
+        <constructor-arg name="value"
+                         value="#{configurationService.configuration.getProperty('azure.hotfolder.local.sync.basefolder')}"/>
+    </bean>
+
+<bean id="azureChannelAdapterTaskExecutor" primary="true"        class="de.hybris.platform.cloud.commons.scheduling.HybrisAwareThreadPoolTaskExecutor">    <property name="waitForTasksToCompleteOnShutdown" value="true"/>    <property name="threadNamePrefix" value="AzureIntegrationTaskExecutorThread-${tenantId}-"/>    <property name="threadGroupName" value="AzureIntegrationTaskExecutor-${tenantId}"/>    <property name="corePoolSize" value="${azure.hotfolder.storage.polling.core-pool-size}"/>    <property name="maxPoolSize" value="${azure.hotfolder.storage.polling.max-pool-size}"/>    <property name="queueCapacity" value="-1"/>    <property name="keepAliveSeconds" value="60"/>    <property name="rejectedExecutionHandler">        <bean class="java.util.concurrent.ThreadPoolExecutor$DiscardPolicy"/>    </property>    <property name="role" value="integration"/>    <property name="autoStartup" value="false"/>    <property name="phase" value="10"/>    <property name="awaitTerminationSeconds" value="60"/></bean>
+
+
+
+    <!-- Azure Account, Client and Session -->
+
+    <bean id="azureHotFolderStorageAccount"
+          class="com.microsoft.azure.storage.CloudStorageAccount"
+          factory-method="parse">
+        <constructor-arg name="connectionString"
+                         value="${azure.hotfolder.storage.account.connection-string}"/>
+    </bean>
+
+    <bean id="azureHotFolderBlobClient"
+          factory-bean="azureHotFolderStorageAccount"
+          factory-method="createCloudBlobClient"/>
+
+    <bean id="azureHotFolderBlobSession"
+          class="de.hybris.platform.cloud.azure.hotfolder.remote.session.AzureBlobSession">
+        <constructor-arg name="client"
+                         ref="azureHotFolderBlobClient"/>
+        <constructor-arg name="containerName"
+                         value="${azure.hotfolder.storage.container.name}"/>
+        <constructor-arg name="createContainerIfNotExists"
+                         value="${azure.hotfolder.storage.container.create}"/>
+    </bean>
+
+    <alias name="defaultAzureBlobSessionFactory" alias="azureBlobSessionFactory"/>
+    <bean id="defaultAzureBlobSessionFactory"
+          class="de.hybris.platform.cloud.azure.hotfolder.remote.session.AzureBlobSessionFactory">
+        <constructor-arg name="blobSession" ref="azureHotFolderBlobSession"/>
+    </bean>
+
+
+
+
+
+    <!-- Filter chain for filtering remote files before synchronisation -->
+
+    <alias name="defaultAzureBlobRegexPatternFileListFilter" alias="azureBlobRegexPatternFileListFilter"/>
+    <bean id="defaultAzureBlobRegexPatternFileListFilter"
+          class="de.hybris.platform.cloud.azure.hotfolder.remote.file.filters.AzureBlobRegexPatternFileListFilter">
+        <constructor-arg name="pattern" value="${azure.hotfolder.storage.container.match.pattern}"/>
+    </bean>
+
+
+    <alias name="simpleHotfolderMetadataStore" alias="hotfolderMetadataStore"/>
+    <!--
+        Use the simple metadata store if you expect a high freqency of many, small files.
+        The simple metadata store uses an in-memory, concurrent map as a store. This provides
+        considerable performance benefits when compared to the hybris persistent store.
+        However, the store is not cluster wide, and is lost on restarts.
+    -->
+    <bean id="simpleHotfolderMetadataStore"
+          class="de.hybris.platform.cloud.commons.spring.integration.metadata.ExpiringSimpleMetadataStore">
+        <constructor-arg name="maxSize" value="${cloud.hotfolder.metadata.max-size}"/>
+        <constructor-arg name="ttl" value="${cloud.hotfolder.metadata.ttl}"/>
+    </bean>
+
+    <!--
+        Use the persistent metadata store if you expect a low volume of files and you
+        need to cluster-wide, persistent and guaranteed once only processing.
+    -->
+    <bean id="persistenHotfolderMetadataStore"
+        parent="abstractHybrisMetadataStore">
+        <constructor-arg name="region" value="${azure.hotfolder.storage.metadatastore.region}"/>
+    </bean>
+
+    <alias name="defaultAzureBlobPersistentAcceptOnceListFilter"
+           alias="azureBlobPersistentAcceptOnceListFilter"/>
+    <bean id="defaultAzureBlobPersistentAcceptOnceListFilter"
+          class="de.hybris.platform.cloud.azure.hotfolder.remote.file.filters.AzureBlobPersistentAcceptOnceListFilter">
+        <constructor-arg name="store" ref="hotfolderMetadataStore"/>
+        <constructor-arg name="prefix" value="${azure.hotfolder.storage.metadatastore.prefix}"/>
+    </bean>
+
+    <alias name="defaultAzureFileFilterList" alias="azureHotfolderFileFilterList"/>
+    <util:list id="defaultAzureFileFilterList">
+        <ref bean="azureBlobRegexPatternFileListFilter"/>
+        <ref bean="azureBlobPersistentAcceptOnceListFilter"/>
+    </util:list>
+
+    <alias name="azureChainFileListFilter" alias="azureHotfolderFileFilter"/>
+    <bean id="azureChainFileListFilter"
+          class="de.hybris.platform.cloud.commons.spring.integration.file.filters.ChainFileListFilter">
+        <constructor-arg name="fileFilters" ref="azureHotfolderFileFilterList"/>
+    </bean>
+
+
+
+
+
+    <!-- Comparator chain for comparing remote files before synchronisation -->
+
+    <bean id="azureHotFolderFileNamePrefixComparator"
+          class="de.hybris.platform.cloud.azure.hotfolder.remote.file.comparators.AzureBlobNameComparatorAdapter">
+        <constructor-arg name="comparator" ref="cloudHotFolderNamePrefixComparator"/>
+    </bean>
+
+    <bean id="azureHotFolderFileNameComparator"
+          class="de.hybris.platform.cloud.azure.hotfolder.remote.file.comparators.AzureBlobNameComparatorAdapter">
+        <constructor-arg name="comparator" ref="cloudHotFolderNameComparator"/>
+    </bean>
+
+    <bean id="azureHotFolderFileNameSequenceComparator"
+          class="de.hybris.platform.cloud.azure.hotfolder.remote.file.comparators.AzureBlobNameComparatorAdapter">
+        <constructor-arg name="comparator" ref="cloudHotFolderNameSequenceComparator"/>
+    </bean>
+
+    <bean id="azureHotFolderFileModifiedComparator"
+          class="de.hybris.platform.cloud.azure.hotfolder.remote.file.comparators.AzureBlobTimestampComparatorAdapter">
+        <constructor-arg name="comparator" ref="cloudHotFolderModifiedComparator"/>
+    </bean>
+
+    <alias name="defaultAzureHotFolderFileComparatorList" alias="azureHotFolderFileComparatorList"/>
+    <util:list id="defaultAzureHotFolderFileComparatorList">
+        <ref bean="azureHotFolderFileNamePrefixComparator"/>
+        <ref bean="azureHotFolderFileNameComparator"/>
+        <ref bean="azureHotFolderFileNameSequenceComparator"/>
+        <ref bean="azureHotFolderFileModifiedComparator"/>
+    </util:list>
+
+    <alias name="azureHotFolderFileComparatorChain" alias="azureHotFolderFileComparator"/>
+    <bean id="azureHotFolderFileComparatorChain" class="org.apache.commons.collections4.comparators.ComparatorChain">
+        <constructor-arg ref="azureHotFolderFileComparatorList"/>
+    </bean>
+
+
+
+
+    <!-- Azure Inbound File Synchronizer and Channel Adapter -->
+
+    <alias name="defaultAzureBlobInboundSynchronizer" alias="azureBlobInboundSynchronizer"/>
+    <bean id="defaultAzureBlobInboundSynchronizer"
+          class="de.hybris.platform.cloud.azure.hotfolder.remote.inbound.AzureBlobInboundSynchronizer">
+        <constructor-arg name="sessionFactory" ref="azureBlobSessionFactory"/>
+        <property name="remoteDirectory" value="#{azureHotfolderRemotePath}"/>
+        <property name="moveToRemoteDirectory" value="#{azureHotfolderProcessingRemotePath}"/>
+        <property name="deleteRemoteFiles" value="${azure.hotfolder.storage.delete.remote.files}"/>
+        <property name="preserveTimestamp" value="true"/>
+        <property name="filter" ref="azureHotfolderFileFilter"/>
+        <property name="comparator" ref="azureHotFolderFileComparator"/>
+    </bean>
+
+    <alias name="defaultAzureBlobSynchronizingMessageSource" alias="azureBlobSynchronizingMessageSource"/>
+    <bean id="defaultAzureBlobSynchronizingMessageSource"
+          class="de.hybris.platform.cloud.azure.hotfolder.remote.inbound.AzureBlobSynchronizingMessageSource">
+        <constructor-arg name="synchronizer" ref="azureBlobInboundSynchronizer"/>
+        <property name="autoCreateLocalDirectory" value="true"/>
+        <property name="localDirectory"
+                  value="#{azureHotfolderLocalDirectoryBase}/#{azureHotfolderRemotePath}"/>
+        <property name="maxFetchSize" value="${azure.hotfolder.storage.polling.fetch.batch-size}"/>
+    </bean>
+
+    <int:inbound-channel-adapter id="azureInboundChannelAdapter"
+                                 auto-startup="false"
+                                 role="${cloud.hotfolder.storage.services.role}"
+                                 phase="50"
+                                 ref="azureBlobSynchronizingMessageSource"
+                                 channel="hotfolderInboundFileHeaderEnricherChannel">
+        <int:poller fixed-rate="${azure.hotfolder.storage.polling.fixed.rate}"
+                    task-executor="azureChannelAdapterTaskExecutor"
+                    max-messages-per-poll="${azure.hotfolder.storage.polling.fetch.batch-size}">
+        </int:poller>
+    </int:inbound-channel-adapter>
+
+    <bean id="azureChannelAdapterTaskExecutor"
+          class="de.hybris.platform.cloud.commons.scheduling.HybrisAwareThreadPoolTaskExecutor">
+        <property name="waitForTasksToCompleteOnShutdown" value="true"/>
+        <property name="threadNamePrefix" value="AzureIntegrationTaskExecutorThread-${tenantId}-"/>
+        <property name="threadGroupName" value="AzureIntegrationTaskExecutor-${tenantId}"/>
+        <property name="corePoolSize" value="${azure.hotfolder.storage.polling.core-pool-size}"/>
+        <property name="maxPoolSize" value="${azure.hotfolder.storage.polling.max-pool-size}"/>
+        <property name="queueCapacity" value="-1"/>
+        <property name="keepAliveSeconds" value="60"/>
+        <property name="rejectedExecutionHandler">
+            <bean class="java.util.concurrent.ThreadPoolExecutor$CallerRunsPolicy"/>
+        </property>
+        <property name="role" value="integration"/>
+        <property name="autoStartup" value="false"/>
+        <property name="phase" value="10"/>
+        <property name="awaitTerminationSeconds" value="60"/>
+    </bean>
+
+    <!-- Azure Outbound Channel adapters for moving remote files into archive/error folders -->
+
+    <bean id="abstractAzureMoveMessageHandler" abstract="true"
+          class="de.hybris.platform.cloud.azure.hotfolder.remote.outbound.AzureBlobRemoteMoveMessageHandler">
+ 		<constructor-arg ref="azureBlobSessionFactory"/>
+		<property name="remoteDirectory" ref="azureHotfolderArchiveRemotePath"/>
+		<property name="fileNameGenerator" ref="azureTimestampFileNameGenerator"/>
+    </bean>
+
+    <bean id="azureTimestampFileNameGenerator"
+          class="de.hybris.platform.cloud.hotfolder.spring.integration.file.TimestampFileNameGenerator">
+        <property name="headerName"
+                  value="#{T(org.springframework.integration.file.FileHeaders).REMOTE_FILE}"/>
+    </bean>
+
+	<alias name="defaultAzureArchiveMessageHandler" alias="azureArchiveMessageHandler"/>
+	<bean id="defaultAzureArchiveMessageHandler" parent="abstractAzureMoveMessageHandler">
+		<property name="remoteDirectory" ref="azureHotfolderArchiveRemotePath"/>
 	</bean>
 
-	<!-- impex converters -->
-	<!-- product import -->
-	<bean id="defaultImpexProductHeader" class="java.lang.String">
-		<constructor-arg>
-			<value># ImpEx for importing data into $CATALOG$
-				$catalogVersion=catalogversion(catalog(id[default=$CATALOG$]),version[default='Staged'])[unique=true]
-				$approved=approvalstatus(code)[default='check']
-				$lang=$LANGUAGE$</value>
-		</constructor-arg>
+   	<alias name="defaultAzureErrorMessageHandler" alias="azureErrorMessageHandler"/>
+	<bean id="defaultAzureErrorMessageHandler" parent="abstractAzureMoveMessageHandler">
+		<property name="remoteDirectory" ref="azureHotfolderErrorRemotePath"/>
 	</bean>
 
-	<!-- Converters -->
-	<bean id="batchProductConverter" class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.impl.DefaultImpexConverter">
-		<property name="header">
-			<value>#{defaultImpexProductHeader}
-				# Insert Products
-				INSERT_UPDATE Product;code[unique=true];varianttype(code);name[lang=$lang];description[lang=$lang];ean;manufacturerName;manufacturerAID;unit(code)[default=pieces];$approved;Europe1PriceFactory_PTG(code)[default=eu-vat-full];sequenceId[translator=de.hybris.platform.acceleratorservices.dataimport.batch.converter.SequenceIdTranslator];$catalogVersion
-			</value>
-		</property>
-		<property name="impexRow">
-			<value>;{+0};{1};{2};{3};{4};{5};{6};{7};{8};{9};{S}</value>
-		</property>
-		<property name="rowFilter">
-			<bean class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.impl.DefaultImpexRowFilter">
-				<property name="expression" value="!row[1]"/>
-			</bean>
-		</property>
-		<property name="type" value="Product"/>
-	</bean>
-	<bean id="azureChannelAdapterTaskExecutor" primary="true"        class="de.hybris.platform.cloud.commons.scheduling.HybrisAwareThreadPoolTaskExecutor">    <property name="waitForTasksToCompleteOnShutdown" value="true"/>    <property name="threadNamePrefix" value="AzureIntegrationTaskExecutorThread-${tenantId}-"/>    <property name="threadGroupName" value="AzureIntegrationTaskExecutor-${tenantId}"/>    <property name="corePoolSize" value="${azure.hotfolder.storage.polling.core-pool-size}"/>    <property name="maxPoolSize" value="${azure.hotfolder.storage.polling.max-pool-size}"/>    <property name="queueCapacity" value="-1"/>    <property name="keepAliveSeconds" value="60"/>    <property name="rejectedExecutionHandler">        <bean class="java.util.concurrent.ThreadPoolExecutor$DiscardPolicy"/>    </property>    <property name="role" value="integration"/>    <property name="autoStartup" value="false"/>    <property name="phase" value="10"/>    <property name="awaitTerminationSeconds" value="60"/></bean>
-	<bean id="batchPriceConverter" class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.impl.DefaultImpexConverter">
-		<property name="header">
-			<value># ImpEx for Importing Prices into $CATALOG$
-				$catalog=$CATALOG$
-				#% impex.setLocale(Locale.ENGLISH);
-				INSERT_UPDATE PriceRow;product(code,catalogversion(catalog(id),version))[unique=true];price[translator=de.hybris.platform.acceleratorservices.dataimport.batch.converter.PriceTranslator];currency(isocode)[unique=true];net[default=$NET$];unit(code)[default=pieces];unitFactor[default=1];minqtd[default=1];catalogversion(catalog(id),version);sequenceId[translator=de.hybris.platform.acceleratorservices.dataimport.batch.converter.SequenceIdTranslator]
-			</value>
-		</property>
-		<property name="impexRow">
-			<value>;{+0}:$catalog:Staged;{+1};{+2};{3};;;;$catalog:Staged;{S}
-				;{+0}:$catalog:Online;{+1};{+2};{3};;;;$catalog:Online;{S}</value>
-		</property>
-	</bean>
-	<bean id="batchTaxConverter" class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.impl.DefaultImpexConverter">
-		<property name="header">
-			<value>#{defaultImpexProductHeader}
-				# Insert tax
-				UPDATE Product;code[unique=true];Europe1PriceFactory_PTG(code)[default=eu-vat-full];sequenceId[translator=de.hybris.platform.acceleratorservices.dataimport.batch.converter.GreaterSequenceIdTranslator];$catalogVersion
-			</value>
-		</property>
-		<property name="impexRow">
-			<value>;{+0};{1};{S}</value>
-		</property>
-	</bean>
-	<bean id="batchExternalTaxConverter" class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.impl.DefaultImpexConverter">
-		<property name="header">
-			<value>#{defaultImpexProductHeader}
-				# Insert external tax
-				INSERT_UPDATE ProductTaxCode;productCode[unique=true];taxCode;taxArea[unique=true]
-			</value>
-		</property>
-		<property name="impexRow">
-			<value>;{+0};{+1};{+2}</value>
-		</property>
+   	<alias name="defaultAzureUnmappedMessageHandler" alias="azureUnmappedMessageHandler"/>
+	<bean id="defaultAzureUnmappedMessageHandler" parent="abstractAzureMoveMessageHandler">
+		<property name="remoteDirectory" ref="azureHotfolderUnmappedRemotePath"/>
 	</bean>
 
-	<bean id="batchStockConverter" class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.impl.DefaultImpexConverter">
-		<property name="header">
-			<value>#{defaultImpexProductHeader}
-				# Insert stock
-				UPDATE Product;code[unique=true];@stock[translator=de.hybris.platform.acceleratorservices.dataimport.batch.stock.StockTranslator,adapter=stockImportAdapter];$catalogVersion
-			</value>
-		</property>
-		<property name="impexRow">
-			<value>;{+0};{+1}:{2}</value>
-		</property>
-	</bean>
-	<bean id="stockImportAdapter" class="de.hybris.platform.acceleratorservices.dataimport.batch.stock.impl.DefaultStockImportAdapter" >
-		<property name="modelService" ref="modelService" />
-		<property name="warehouseService" ref="warehouseService" />
-		<property name="stockService" ref="stockService" />
-		<property name="warehouseCode" value="default"/>
-	</bean>
-	<bean id="batchStockIncrementalConverter" class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.impl.DefaultImpexConverter">
-		<property name="header">
-			<value>#{defaultImpexProductHeader}
-				# Insert stock
-				UPDATE Product;code[unique=true];@stock[translator=de.hybris.platform.acceleratorservices.dataimport.batch.stock.StockTranslator,adapter=stockIncrementalImportAdapter];$catalogVersion
-			</value>
-		</property>
-		<property name="impexRow">
-			<value>;{+0};{+1}:{2}</value>
-		</property>
-	</bean>
-	<bean id="stockIncrementalImportAdapter" class="de.hybris.platform.acceleratorservices.dataimport.batch.stock.impl.IncrementalStockImportAdapter" >
-		<property name="modelService" ref="modelService" />
-		<property name="warehouseService" ref="warehouseService" />
-		<property name="stockService" ref="stockService" />
-		<property name="warehouseCode" value="default"/>
-	</bean>
-	<bean id="batchMerchandiseConverter" class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.impl.DefaultImpexConverter">
-		<property name="header">
-			<value>#{defaultImpexProductHeader}
-				# Insert references
-				INSERT_UPDATE ProductReference;source(code,$catalogVersion)[unique=true];referenceType(code);target(code,$catalogVersion)[unique=true];active[default=true];preselected[default=false]
-			</value>
-		</property>
-		<property name="impexRow">
-			<value>;{+0};{+1};{+2}</value>
-		</property>
-	</bean>
+	<int:outbound-channel-adapter id="azureArchiveOutboundChannelAdapter"
+	                              ref="azureArchiveMessageHandler"/>
 
-	<bean id="batchCustomerConverter" class="de.hybris.platform.acceleratorservices.dataimport.batch.converter.impl.DefaultImpexConverter">
-		<property name="header">
-			<value>#{defaultImpexProductHeader}
-				# Insert Customer
-				$defaultPassword=1234
-				$setName=name[cellDecorator=de.hybris.platform.acceleratorservices.dataimport.batch.decorator.CustomerNameDecorator]
-				INSERT Customer;uid[unique=true];$setName;title(code);password[default=$defaultPassword]
-			</value>
-		</property>
-		<property name="impexRow">
-			<value>;{+0};{1} {2};{3};</value>
-		</property>
-	</bean>
+	<int:outbound-channel-adapter id="azureErrorOutboundChannelAdapter"
+	                              ref="azureErrorMessageHandler"/>
 
-	<!-- AOP -->
-	<aop:config proxy-target-class="false">
-		<aop:pointcut id="taskPointcut" expression="execution(* de.hybris.platform.acceleratorservices.dataimport.batch.HeaderTask.*(..))" />
-		<aop:aspect ref="timeMeasurementAspect">
-			<aop:around pointcut-ref="taskPointcut" method="measure" />
-		</aop:aspect>
-		<aop:aspect ref="tenantActivationAspect">
-			<aop:around pointcut-ref="taskPointcut" method="execute" />
-		</aop:aspect>
-		<aop:aspect ref="exceptionHandlerAspect">
-			<aop:around pointcut-ref="taskPointcut" method="execute" />
-		</aop:aspect>
-	</aop:config>
-	<bean id="timeMeasurementAspect" class="de.hybris.platform.acceleratorservices.dataimport.batch.aop.TimeMeasurementAspect" />
-	<bean id="tenantActivationAspect" class="de.hybris.platform.acceleratorservices.dataimport.batch.aop.TenantActivationAspect" />
-	<bean id="exceptionHandlerAspect" class="de.hybris.platform.acceleratorservices.dataimport.batch.aop.ExceptionHandlerAspect" />
+    <file:inbound-channel-adapter id="azureLocalErrorInboundChannelAdapter"
+                                  directory="#{azureHotfolderLocalDirectoryBase}/${tenantId}/error"
+                                  prevent-duplicates="true"
+                                  ignore-hidden="true"
+                                  filename-regex="^(.*)-(\d+)\.csv">
+        <int:poller fixed-rate="1000" />
+    </file:inbound-channel-adapter>
+
+    <int:outbound-channel-adapter id="azureLocalErrorOutboundChannelAdapter"
+                                  channel="azureLocalErrorInboundChannelAdapter" ref="azureBlobMessageHandler"/>
+
+    <bean id="azureBlobMessageHandler" class="de.hybris.platform.cloud.azure.hotfolder.remote.outbound.AzureBlobMessageHandler">
+        <constructor-arg ref="azureBlobSessionFactory"/>
+        <property name="remoteDirectory" ref="azureHotfolderErrorRemotePath"/>
+        <property name="fileNameGenerator" ref="azureTimestampFileNameGenerator"/>
+    </bean>
+
+    <!-- AOP Aspect for monitoring the progress of blob transfer operations -->
+
+    <bean id="blobTransferredAspect"
+          parent="abstractMonitoringAspect"
+          class="de.hybris.platform.cloud.azure.hotfolder.aop.BlobTransferredAspect"/>
+
+    <aop:config>
+        <aop:aspect ref="blobTransferredAspect">
+            <aop:around method="aroundRead" pointcut="bean(azureHotFolderBlobSession) and execution(* read(..)) and args(path,..)"/>
+        </aop:aspect>
+    </aop:config>
+
 </beans>

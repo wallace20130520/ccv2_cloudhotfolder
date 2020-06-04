@@ -57,10 +57,6 @@
                          value="#{configurationService.configuration.getProperty('azure.hotfolder.local.sync.basefolder')}"/>
     </bean>
 
-<bean id="azureChannelAdapterTaskExecutor" primary="true"        class="de.hybris.platform.cloud.commons.scheduling.HybrisAwareThreadPoolTaskExecutor">    <property name="waitForTasksToCompleteOnShutdown" value="true"/>    <property name="threadNamePrefix" value="AzureIntegrationTaskExecutorThread-${tenantId}-"/>    <property name="threadGroupName" value="AzureIntegrationTaskExecutor-${tenantId}"/>    <property name="corePoolSize" value="${azure.hotfolder.storage.polling.core-pool-size}"/>    <property name="maxPoolSize" value="${azure.hotfolder.storage.polling.max-pool-size}"/>    <property name="queueCapacity" value="-1"/>    <property name="keepAliveSeconds" value="60"/>    <property name="rejectedExecutionHandler">        <bean class="java.util.concurrent.ThreadPoolExecutor$DiscardPolicy"/>    </property>    <property name="role" value="integration"/>    <property name="autoStartup" value="false"/>    <property name="phase" value="10"/>    <property name="awaitTerminationSeconds" value="60"/></bean>
-
-
-
     <!-- Azure Account, Client and Session -->
 
     <bean id="azureHotFolderStorageAccount"

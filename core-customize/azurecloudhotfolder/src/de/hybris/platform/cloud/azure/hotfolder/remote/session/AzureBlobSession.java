@@ -55,7 +55,7 @@ public class AzureBlobSession implements ExtendedSession<CloudBlob>
 	 * List all the paths of the {@link ListBlobItem} contained within the given path
 	 *
 	 * @param path to be queried
-	 * @return {@link String[]} of full paths
+	 * @return {@link String String[]} of full paths
 	 * @throws IOException when path results in invalid URI or exception occurs communicating with Storage Service
 	 */
 	@Override
@@ -70,7 +70,7 @@ public class AzureBlobSession implements ExtendedSession<CloudBlob>
 	 * List all the {@link ListBlobItem} contained within the given path
 	 *
 	 * @param path to be queried
-	 * @return {@link CloudBlob[]} of blobs contained
+	 * @return {@link CloudBlob CloudBlob[]} of blobs contained
 	 * @throws IOException when path results in invalid URI or exception occurs communicating with Storage Service
 	 */
 	@Override

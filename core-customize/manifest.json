@@ -43,9 +43,9 @@
 		"modeltacceleratorservices",
 		"electronicsstore",
 		"yacceleratorstorefront",
-		"cloudcommons",
-		"cloudhotfolder",
-		"azurecloudhotfolder",
+		//"cloudcommons",
+		//"cloudhotfolder",
+		//"azurecloudhotfolder",
 		"backoffice"
 	],
 	"aspects": [{
